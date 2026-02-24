@@ -1,8 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Wine, Cigarette, Stethoscope, Menu, Activity, Users, Upload, Plus } from 'lucide-react';
+import { LayoutDashboard, Wine, Cigarette, Stethoscope, Menu, Activity, Users, Upload, Plus, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from './lib/utils';
 import { isSupabaseConfigured } from './lib/supabase';
+import { AUTH_KEY, checkAuth } from './pages/SignIn';
 
 import Overview from './pages/Overview';
 import Drinking from './pages/Drinking';
@@ -10,6 +11,7 @@ import Smoking from './pages/Smoking';
 import OccupationalMedicine from './pages/OccupationalMedicine';
 import EmployeeOverview from './pages/EmployeeOverview';
 import UploadData from './pages/Upload';
+import SignIn from './pages/SignIn';
 
 const INITIAL_YEARS = ['2024', '2025'];
 const YEARS_KEY = 'healthdash_years';
@@ -44,8 +46,9 @@ const SidebarItem = ({ to, icon: Icon, label, active }: { to: string; icon: any;
   </Link>
 );
 
-const Sidebar = ({ isOpen }: { isOpen: boolean }) => {
+const Sidebar = ({ isOpen, onSignOut }: { isOpen: boolean; onSignOut: () => void }) => {
   const location = useLocation();
+
   return (
     <aside className={cn(
       "fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-100 transition-transform lg:translate-x-0",
@@ -78,9 +81,22 @@ const Sidebar = ({ isOpen }: { isOpen: boolean }) => {
           <SidebarItem to="/upload" icon={Upload} label="Upload CSV" active={location.pathname === "/upload"} />
         </nav>
 
-        <div className="p-6">
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Supabase Status</p>
+        <div className="p-6 space-y-3">
+          {/* Sign out */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Signed in</p>
+            <button
+              onClick={onSignOut}
+              className="mt-1 flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500 transition-colors font-medium"
+            >
+              <LogOut size={12} />
+              Sign out
+            </button>
+          </div>
+
+          {/* Supabase status */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Supabase</p>
             <div className="flex items-center gap-2">
               <div className={cn(
                 "w-2 h-2 rounded-full",
@@ -179,7 +195,9 @@ const TopBar = ({
   );
 };
 
+// ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
+  const [authed, setAuthed] = useState(checkAuth);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedYear, setSelectedYear] = useState('2025');
   const [years, setYears] = useState<string[]>(getStoredYears);
@@ -192,10 +210,21 @@ export default function App() {
     setYears(prev => addYear(y, prev));
   };
 
+  const handleSignOut = () => {
+    localStorage.removeItem(AUTH_KEY);
+    setAuthed(false);
+  };
+
+  // Not signed in — show login page
+  if (!authed) {
+    return <SignIn onSuccess={() => setAuthed(true)} />;
+  }
+
+  // Signed in — show dashboard
   return (
     <Router>
       <div className="min-h-screen bg-[#f8f9fa] text-slate-900">
-        <Sidebar isOpen={isSidebarOpen} />
+        <Sidebar isOpen={isSidebarOpen} onSignOut={handleSignOut} />
 
         {isSidebarOpen && (
           <div className="fixed inset-0 z-40 bg-black/20 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
