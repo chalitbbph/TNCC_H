@@ -1,0 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+}
+
+body {
+  @apply bg-[#f8f9fa] text-slate-900 antialiased;
+}
+
+.card-minimal {
+  @apply bg-white border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] rounded-2xl;
+}
