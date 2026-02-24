@@ -3,7 +3,7 @@ import { LayoutDashboard, Wine, Cigarette, Stethoscope, Menu, Activity, Users, U
 import { useState, useEffect } from 'react';
 import { cn } from './lib/utils';
 import { isSupabaseConfigured } from './lib/supabase';
-import { AUTH_KEY, checkAuth } from './pages/SignIn';
+import SignIn, { AUTH_KEY, checkAuth } from './pages/SignIn';
 
 import Overview from './pages/Overview';
 import Drinking from './pages/Drinking';
@@ -11,7 +11,6 @@ import Smoking from './pages/Smoking';
 import OccupationalMedicine from './pages/OccupationalMedicine';
 import EmployeeOverview from './pages/EmployeeOverview';
 import UploadData from './pages/Upload';
-import SignIn from './pages/SignIn';
 
 const INITIAL_YEARS = ['2024', '2025'];
 const YEARS_KEY = 'healthdash_years';
