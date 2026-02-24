@@ -12,6 +12,7 @@ export const supabase = supabaseUrl && supabaseAnonKey
   : createClient('https://placeholder.supabase.co', 'placeholder-anon-key');
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+// v2: force fresh build to pick up Vercel env vars
 
 /** Fetch ALL rows from a table by paginating in batches of 1000 */
 export async function fetchAll(tableName: string): Promise<any[]> {
