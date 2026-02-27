@@ -147,7 +147,7 @@ const TopBar = ({
 
         <div className="flex-1 px-4">
           <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider hidden sm:block">
-            VP Logistics Health Dashboard
+            Logistics Health Dashboard
           </h2>
         </div>
 
