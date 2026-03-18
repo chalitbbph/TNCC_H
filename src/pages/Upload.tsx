@@ -12,6 +12,7 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [year, setYear] = useState('');
+  const [yearAutoDetected, setYearAutoDetected] = useState(false);
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
   const [mappedHeaders, setMappedHeaders] = useState<string[]>([]);
   const [preview, setPreview] = useState<Record<string, any>[]>([]);
@@ -32,6 +33,15 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
     setFile(f);
     setResult(null);
     setError(null);
+
+    // Auto-detect year from filename (e.g. health_2025.csv, 2025_data.csv)
+    const yearMatch = f.name.match(/\b(20\d{2})\b/);
+    if (yearMatch) {
+      setYear(yearMatch[1]);
+      setYearAutoDetected(true);
+    } else {
+      setYearAutoDetected(false);
+    }
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -129,6 +139,7 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
     setTotalRows(0);
     setResult(null);
     setError(null);
+    setYearAutoDetected(false);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -138,19 +149,18 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
       <div>
         <h2 className="text-xl font-bold text-slate-900">Upload Health Data</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Upload a CSV file to add or update employee health records. Works for any year — no code changes needed.
+          Drop a CSV file — the year is auto-detected from the filename. Existing records are updated, new ones are added.
         </p>
       </div>
 
       {/* How it works */}
       <div className="card-minimal p-6">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">How to add data for a new year</p>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Re-uploading updated data? It's 3 steps</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { n: '1', text: 'Export your Excel file to CSV (File → Save As → CSV UTF-8)' },
-            { n: '2', text: 'Create table in Supabase (one-time): duplicate health_2024 structure' },
-            { n: '3', text: 'Enter the year and upload the CSV here' },
-            { n: '4', text: 'All charts and pages update automatically — zero code changes' },
+            { n: '1', text: 'Save your Excel as CSV UTF-8 (File → Save As → CSV UTF-8)' },
+            { n: '2', text: 'Drop the CSV here — year auto-detects from filename (e.g. health_2025.csv)' },
+            { n: '3', text: 'Click Upload — existing records update, new ones are added automatically' },
           ].map(s => (
             <div key={s.n} className="flex gap-3">
               <div className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{s.n}</div>
@@ -158,17 +168,27 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
             </div>
           ))}
         </div>
+        <p className="text-[10px] text-slate-400 mt-4 pt-4 border-t border-slate-100">
+          Adding a new year for the first time? See the SQL helper below to create the table in Supabase first.
+        </p>
       </div>
 
       {/* Year Input */}
       <div className="card-minimal p-6">
-        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Year</label>
-        <div className="flex items-center gap-3 mt-3">
+        <div className="flex items-center gap-2 mb-3">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Year</label>
+          {yearAutoDetected && (
+            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100 text-[10px] font-bold rounded-full">
+              Auto-detected from filename
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
           <input
             type="text"
             placeholder="e.g. 2026"
             value={year}
-            onChange={e => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            onChange={e => { setYear(e.target.value.replace(/\D/g, '').slice(0, 4)); setYearAutoDetected(false); }}
             className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-slate-400 w-36 text-center text-slate-900"
           />
           <p className="text-xs text-slate-400">The data will be uploaded to the <code className="bg-slate-100 px-1 rounded text-blue-600">health_{year || 'YYYY'}</code> table.</p>

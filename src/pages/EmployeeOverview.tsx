@@ -1,40 +1,94 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { normalizeData } from '../lib/data-normalization';
 import { FullReport } from '../types/health';
-import { Users, AlertCircle, Download, Search, Database, CheckCircle, XCircle } from 'lucide-react';
+import { Users, AlertCircle, Download, Search, Database, CheckCircle, XCircle, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn, exportToCSV } from '../lib/utils';
 
-const CRITICAL_FIELDS: { key: keyof FullReport; label: string }[] = [
-  { key: 'branch', label: 'สาขา' },
-  { key: 'smoke', label: 'Smoke' },
-  { key: 'drink', label: 'Drink' },
-  { key: 'hearing_test', label: 'Hearing' },
-  { key: 'vision_occupational', label: 'Vision' },
-  { key: 'spirometry', label: 'Spirometry' },
-  { key: 'chest_xray', label: 'Chest X-Ray' },
-  { key: 'mental_health_result', label: 'Mental Health' },
-  { key: 'sleep_disorder_result', label: 'Sleep' },
-  { key: 'overall_result', label: 'Overall Result' },
+type FieldCategory = 'occ_medicine' | 'ncds' | 'mental' | 'sleep' | 'lifestyle' | 'info';
+
+const CATEGORY_STYLES: Record<FieldCategory, { badge: string; label: string }> = {
+  occ_medicine: { badge: 'bg-blue-50 text-blue-600 border-blue-100',   label: 'Occ Medicine' },
+  ncds:         { badge: 'bg-orange-50 text-orange-600 border-orange-100', label: 'NCDs' },
+  mental:       { badge: 'bg-purple-50 text-purple-600 border-purple-100', label: 'Mental Health' },
+  sleep:        { badge: 'bg-indigo-50 text-indigo-600 border-indigo-100', label: 'Sleep' },
+  lifestyle:    { badge: 'bg-teal-50 text-teal-600 border-teal-100',   label: 'Lifestyle' },
+  info:         { badge: 'bg-amber-50 text-amber-600 border-amber-100',  label: 'Info' },
+};
+
+const CRITICAL_FIELDS: { key: keyof FullReport; label: string; category: FieldCategory }[] = [
+  { key: 'branch',                label: 'Branch',        category: 'info' },
+  { key: 'overall_result',        label: 'Overall Result', category: 'info' },
+  // Lifestyle
+  { key: 'smoke',                 label: 'Smoke',         category: 'lifestyle' },
+  { key: 'drink',                 label: 'Drink',         category: 'lifestyle' },
+  // Occ Medicine
+  { key: 'hearing_test',          label: 'Hearing',       category: 'occ_medicine' },
+  { key: 'vision_occupational',   label: 'Vision',        category: 'occ_medicine' },
+  { key: 'spirometry',            label: 'Spirometry',    category: 'occ_medicine' },
+  { key: 'chest_xray',            label: 'Chest X-Ray',   category: 'occ_medicine' },
+  // Mental Health
+  { key: 'mental_health_result',  label: 'Mental Health', category: 'mental' },
+  // Sleep
+  { key: 'sleep_disorder_result', label: 'Sleep Disorder',category: 'sleep' },
+  { key: 'sleepiness_result',     label: 'Sleepiness',    category: 'sleep' },
+  // NCDs — lab values
+  { key: 'fbs',                   label: 'FBS',           category: 'ncds' },
+  { key: 'cholesterol',           label: 'Cholesterol',   category: 'ncds' },
+  { key: 'triglyceride',          label: 'Triglyceride',  category: 'ncds' },
+  { key: 'hdl',                   label: 'HDL',           category: 'ncds' },
+  { key: 'ldl',                   label: 'LDL',           category: 'ncds' },
+  { key: 'uric_acid',             label: 'Uric Acid',     category: 'ncds' },
+  { key: 'bun',                   label: 'BUN',           category: 'ncds' },
+  { key: 'creatinine',            label: 'Creatinine',    category: 'ncds' },
+  { key: 'sgot',                  label: 'SGOT',          category: 'ncds' },
+  { key: 'sgpt',                  label: 'SGPT',          category: 'ncds' },
 ];
+
+type MissingField = { label: string; category: FieldCategory };
 
 function isMissing(value: any): boolean {
   return value === null || value === undefined || value === '' || value === '-';
 }
 
-function getMissingFields(emp: FullReport): string[] {
-  return CRITICAL_FIELDS.filter(f => isMissing(emp[f.key])).map(f => f.label);
+function getMissingFields(emp: FullReport): MissingField[] {
+  return CRITICAL_FIELDS.filter(f => isMissing(emp[f.key])).map(f => ({ label: f.label, category: f.category }));
 }
 
+type ExportCategory = 'all' | 'missing_all' | 'occ_medicine' | 'ncds' | 'mental' | 'sleep' | 'lifestyle';
+
+const EXPORT_OPTIONS: { key: ExportCategory; label: string; sub: string; divider?: boolean }[] = [
+  { key: 'all',          label: 'All Employees',          sub: 'Full list with completeness status' },
+  { key: 'missing_all',  label: 'All Missing Data',        sub: 'Anyone missing any tracked field', divider: true },
+  { key: 'occ_medicine', label: 'Missing: Occ Medicine',   sub: 'Hearing · Vision · Spirometry · Chest X-Ray' },
+  { key: 'ncds',         label: 'Missing: NCDs',           sub: 'FBS · Cholesterol · Lipids · Liver · Kidney' },
+  { key: 'mental',       label: 'Missing: Mental Health',  sub: 'Mental health assessment results' },
+  { key: 'sleep',        label: 'Missing: Sleep',          sub: 'Sleep disorder & sleepiness scores' },
+  { key: 'lifestyle',    label: 'Missing: Lifestyle',      sub: 'Smoking and drinking status' },
+];
+
 export default function EmployeeOverview({ year }: { year: string }) {
-  const [data, setData] = useState<FullReport[]>([]);
+  const [data, setData]         = useState<FullReport[]>([]);
   const [data2024, setData2024] = useState<FullReport[]>([]);
   const [data2025, setData2025] = useState<FullReport[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'all' | 'missing'>('all');
-  const [search, setSearch] = useState('');
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [tab, setTab]           = useState<'all' | 'missing'>('all');
+  const [search, setSearch]     = useState('');
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -52,9 +106,7 @@ export default function EmployeeOverview({ year }: { year: string }) {
         const d2025 = normalizeData<FullReport>(r2025.data || []);
         setData2024(d2024);
         setData2025(d2025);
-        const tableName = `health_${year}`;
-        const yearData = year === '2024' ? d2024 : d2025;
-        setData(yearData);
+        setData(year === '2024' ? d2024 : d2025);
       } catch (err: any) {
         setError(err.message || 'Failed to fetch data');
       } finally {
@@ -64,7 +116,6 @@ export default function EmployeeOverview({ year }: { year: string }) {
     fetchData();
   }, [year]);
 
-  // Update displayed data when year changes
   useEffect(() => {
     setData(year === '2024' ? data2024 : data2025);
   }, [year, data2024, data2025]);
@@ -75,9 +126,24 @@ export default function EmployeeOverview({ year }: { year: string }) {
     [data]
   );
 
+  // Per-category missing counts
+  const categoryCounts = useMemo(() => {
+    const cats: Record<FieldCategory, number> = { occ_medicine: 0, ncds: 0, mental: 0, sleep: 0, lifestyle: 0, info: 0 };
+    for (const emp of data) {
+      const missing = getMissingFields(emp);
+      const seen = new Set<FieldCategory>();
+      for (const f of missing) {
+        if (!seen.has(f.category)) { cats[f.category]++; seen.add(f.category); }
+      }
+    }
+    return cats;
+  }, [data]);
+
   const searchLower = search.toLowerCase();
   const filtered = useMemo(() => {
-    const source = tab === 'missing' ? withMissing : data.map(emp => ({ ...emp, _missingFields: getMissingFields(emp) }));
+    const source = tab === 'missing'
+      ? withMissing
+      : data.map(emp => ({ ...emp, _missingFields: getMissingFields(emp) }));
     if (!search) return source;
     return source.filter(emp =>
       emp.full_name?.toLowerCase().includes(searchLower) ||
@@ -105,33 +171,48 @@ export default function EmployeeOverview({ year }: { year: string }) {
   const onlyIn2024 = data2024.length - inBothYears;
   const onlyIn2025 = data2025.length - inBothYears;
 
-  const handleExportAll = () => {
-    exportToCSV(
-      data.map(emp => ({
-        employee_id: emp.employee_id,
-        full_name: emp.full_name,
-        branch: emp.branch,
-        department: emp.department,
-        position: emp.position,
-        gender: emp.gender,
-        age: emp.age,
-        missing_fields: getMissingFields(emp).join(' | ') || 'None',
-      })),
-      `employee_list_${year}.csv`
-    );
-  };
+  const baseRow = (emp: FullReport) => ({
+    employee_id: emp.employee_id,
+    full_name:   emp.full_name,
+    branch:      emp.branch,
+    department:  emp.department,
+    position:    emp.position,
+    gender:      emp.gender,
+    age:         emp.age,
+  });
 
-  const handleExportMissing = () => {
-    exportToCSV(
-      withMissing.map(emp => ({
-        employee_id: emp.employee_id,
-        full_name: emp.full_name,
-        branch: emp.branch,
-        department: emp.department,
-        missing_fields: emp._missingFields.join(' | '),
-      })),
-      `missing_data_${year}.csv`
-    );
+  const handleExport = (category: ExportCategory) => {
+    setShowExportMenu(false);
+    if (category === 'all') {
+      exportToCSV(
+        data.map(emp => ({
+          ...baseRow(emp),
+          missing_count: getMissingFields(emp).length,
+          missing_fields: getMissingFields(emp).map(f => f.label).join(' | ') || 'None',
+        })),
+        `employees_all_${year}.csv`
+      );
+    } else if (category === 'missing_all') {
+      exportToCSV(
+        withMissing.map(emp => ({
+          ...baseRow(emp),
+          missing_fields: emp._missingFields.map(f => f.label).join(' | '),
+        })),
+        `missing_data_${year}.csv`
+      );
+    } else {
+      const catFields = CRITICAL_FIELDS.filter(f => f.category === category);
+      const rows = data
+        .filter(emp => catFields.some(f => isMissing(emp[f.key])))
+        .map(emp => {
+          const status = catFields.reduce((acc, f) => ({
+            ...acc,
+            [f.label]: isMissing(emp[f.key]) ? 'MISSING' : String(emp[f.key] ?? 'N/A'),
+          }), {} as Record<string, string>);
+          return { ...baseRow(emp), ...status };
+        });
+      exportToCSV(rows, `missing_${category}_${year}.csv`);
+    }
   };
 
   if (!isSupabaseConfigured) return (
@@ -191,6 +272,24 @@ export default function EmployeeOverview({ year }: { year: string }) {
         </div>
       </div>
 
+      {/* Missing by Category */}
+      <div className="card-minimal p-6">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Missing Data by Category ({year})</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {(Object.entries(CATEGORY_STYLES) as [FieldCategory, typeof CATEGORY_STYLES[FieldCategory]][])
+            .filter(([k]) => k !== 'info')
+            .map(([cat, style]) => (
+              <div key={cat} className="bg-slate-50 rounded-2xl p-4 text-center">
+                <span className={cn("inline-block px-2 py-0.5 text-[10px] font-bold rounded-full border mb-2", style.badge)}>
+                  {style.label}
+                </span>
+                <p className="text-2xl font-bold text-slate-900">{categoryCounts[cat]}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">employees</p>
+              </div>
+            ))}
+        </div>
+      </div>
+
       {/* Year Continuity Info */}
       <div className="grid grid-cols-3 gap-4">
         <div className="card-minimal p-4 text-center">
@@ -220,15 +319,12 @@ export default function EmployeeOverview({ year }: { year: string }) {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <Tooltip
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                />
+                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                 <Bar dataKey="count2024" name="2024" fill="#94a3b8" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="count2025" name="2025" fill="#0f172a" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {/* Branch Table */}
           <div className="mt-6 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
@@ -290,13 +386,39 @@ export default function EmployeeOverview({ year }: { year: string }) {
                 className="pl-8 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 w-52"
               />
             </div>
-            <button
-              onClick={tab === 'missing' ? handleExportMissing : handleExportAll}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all"
-            >
-              <Download size={13} />
-              Export CSV
-            </button>
+
+            {/* Export Dropdown */}
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                onClick={() => setShowExportMenu(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all"
+              >
+                <Download size={13} />
+                Export Data
+                <ChevronDown size={12} className={cn("transition-transform", showExportMenu && "rotate-180")} />
+              </button>
+
+              {showExportMenu && (
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden">
+                  <p className="px-4 pt-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Export Options</p>
+                  {EXPORT_OPTIONS.map((opt, i) => (
+                    <div key={opt.key}>
+                      {opt.divider && i > 0 && <div className="my-1 border-t border-slate-100" />}
+                      <button
+                        onClick={() => handleExport(opt.key)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
+                      >
+                        <p className="text-xs font-bold text-slate-900">{opt.label}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{opt.sub}</p>
+                      </button>
+                    </div>
+                  ))}
+                  <div className="px-4 pb-3 pt-1">
+                    <p className="text-[10px] text-slate-300">CSV format · UTF-8 · Excel compatible</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -348,8 +470,11 @@ export default function EmployeeOverview({ year }: { year: string }) {
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
                           {missing.map(f => (
-                            <span key={f} className="px-2 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded-full border border-amber-100">
-                              {f}
+                            <span
+                              key={f.label}
+                              className={cn("px-2 py-0.5 text-[10px] font-bold rounded-full border", CATEGORY_STYLES[f.category].badge)}
+                            >
+                              {f.label}
                             </span>
                           ))}
                         </div>

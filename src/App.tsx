@@ -59,7 +59,10 @@ const Sidebar = ({ isOpen, onSignOut }: { isOpen: boolean; onSignOut: () => void
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
               <Activity className="text-white" size={18} />
             </div>
-            <h1 className="text-lg font-bold tracking-tight text-slate-900">HealthLog</h1>
+            <div>
+              <h1 className="text-sm font-bold tracking-tight text-slate-900 leading-tight">VP Logistics</h1>
+              <p className="text-[10px] text-slate-400 font-medium leading-tight">Health Dashboard</p>
+            </div>
           </div>
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mt-4">Navigation</p>
         </div>
