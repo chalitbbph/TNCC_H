@@ -42,6 +42,7 @@ export interface HealthRecord {
   hbs_ag: string;
   hbs_ab: string;
   amphetamine: string;
+  asthma_allergy: string;
   created_at: string;
 }
 
