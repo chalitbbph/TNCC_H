@@ -40,8 +40,8 @@ export default function SignIn({ onSuccess }: { onSuccess: () => void }) {
           <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
             <Activity className="text-white" size={24} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">HealthLog</h1>
-          <p className="text-sm text-slate-400 mt-1">VP Logistics Health Dashboard</p>
+          <h1 className="text-2xl font-bold text-slate-900">Health Dashboard</h1>
+          <p className="text-sm text-slate-400 mt-1">Logistics Employee Health Monitor</p>
         </div>
 
         {/* Card */}

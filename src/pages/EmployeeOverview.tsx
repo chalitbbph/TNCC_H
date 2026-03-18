@@ -76,15 +76,17 @@ export default function EmployeeOverview({ year }: { year: string }) {
   const [error, setError]       = useState<string | null>(null);
   const [tab, setTab]           = useState<'all' | 'missing'>('all');
   const [search, setSearch]     = useState('');
+  const [missingFilter, setMissingFilter] = useState<'all' | FieldCategory>('all');
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close export dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setShowExportMenu(false);
-      }
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setShowExportMenu(false);
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) setShowFilterMenu(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -141,16 +143,20 @@ export default function EmployeeOverview({ year }: { year: string }) {
 
   const searchLower = search.toLowerCase();
   const filtered = useMemo(() => {
-    const source = tab === 'missing'
+    let source = tab === 'missing'
       ? withMissing
       : data.map(emp => ({ ...emp, _missingFields: getMissingFields(emp) }));
+    // Apply category filter on missing tab
+    if (tab === 'missing' && missingFilter !== 'all') {
+      source = source.filter(emp => emp._missingFields.some(f => f.category === missingFilter));
+    }
     if (!search) return source;
     return source.filter(emp =>
       emp.full_name?.toLowerCase().includes(searchLower) ||
       emp.employee_id?.toLowerCase().includes(searchLower) ||
       emp.branch?.toLowerCase().includes(searchLower)
     );
-  }, [tab, data, withMissing, search, searchLower]);
+  }, [tab, data, withMissing, search, searchLower, missingFilter]);
 
   const branches = useMemo(() => {
     const all = [...data2024, ...data2025];
@@ -360,7 +366,7 @@ export default function EmployeeOverview({ year }: { year: string }) {
         <div className="p-6 border-b border-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
             <button
-              onClick={() => setTab('all')}
+              onClick={() => { setTab('all'); setMissingFilter('all'); }}
               className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
                 tab === 'all' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}
             >
@@ -386,6 +392,50 @@ export default function EmployeeOverview({ year }: { year: string }) {
                 className="pl-8 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 w-52"
               />
             </div>
+
+            {/* Category Filter (missing tab only) */}
+            {tab === 'missing' && (
+              <div className="relative" ref={filterMenuRef}>
+                <button
+                  onClick={() => setShowFilterMenu(v => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all",
+                    missingFilter === 'all'
+                      ? "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400"
+                      : "bg-slate-900 border-slate-900 text-white"
+                  )}
+                >
+                  {missingFilter === 'all' ? 'All Categories' : CATEGORY_STYLES[missingFilter as FieldCategory].label}
+                  <ChevronDown size={12} className={cn("transition-transform", showFilterMenu && "rotate-180")} />
+                </button>
+                {showFilterMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden">
+                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filter by Category</p>
+                    <button
+                      onClick={() => { setMissingFilter('all'); setShowFilterMenu(false); }}
+                      className={cn("w-full text-left px-4 py-2.5 text-xs font-bold hover:bg-slate-50 transition-colors", missingFilter === 'all' && "text-slate-900 bg-slate-50")}
+                    >
+                      All Categories
+                      <span className="ml-2 text-slate-400 font-normal">({withMissing.length})</span>
+                    </button>
+                    <div className="my-1 border-t border-slate-100" />
+                    {(Object.entries(CATEGORY_STYLES) as [FieldCategory, typeof CATEGORY_STYLES[FieldCategory]][])
+                      .filter(([k]) => k !== 'info')
+                      .map(([cat, style]) => (
+                        <button
+                          key={cat}
+                          onClick={() => { setMissingFilter(cat); setShowFilterMenu(false); }}
+                          className={cn("w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors flex items-center justify-between", missingFilter === cat && "bg-slate-50")}
+                        >
+                          <span className={cn("px-2 py-0.5 text-[10px] font-bold rounded-full border", style.badge)}>{style.label}</span>
+                          <span className="text-xs text-slate-400">{categoryCounts[cat]}</span>
+                        </button>
+                      ))}
+                    <div className="pb-2" />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Export Dropdown */}
             <div className="relative" ref={exportMenuRef}>
@@ -421,6 +471,16 @@ export default function EmployeeOverview({ year }: { year: string }) {
             </div>
           </div>
         </div>
+
+        {tab === 'missing' && missingFilter !== 'all' && (
+          <div className="px-6 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+            <span className={cn("px-2 py-0.5 text-[10px] font-bold rounded-full border", CATEGORY_STYLES[missingFilter as FieldCategory].badge)}>
+              {CATEGORY_STYLES[missingFilter as FieldCategory].label}
+            </span>
+            <span className="text-xs text-slate-500">Showing {filtered.length} employees missing this category</span>
+            <button onClick={() => setMissingFilter('all')} className="ml-auto text-[10px] text-slate-400 hover:text-slate-700 font-bold">Clear filter ×</button>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

@@ -60,7 +60,7 @@ const Sidebar = ({ isOpen, onSignOut }: { isOpen: boolean; onSignOut: () => void
               <Activity className="text-white" size={18} />
             </div>
             <div>
-              <h1 className="text-sm font-bold tracking-tight text-slate-900 leading-tight">VP Logistics</h1>
+              <h1 className="text-sm font-bold tracking-tight text-slate-900 leading-tight">Logistics</h1>
               <p className="text-[10px] text-slate-400 font-medium leading-tight">Health Dashboard</p>
             </div>
           </div>

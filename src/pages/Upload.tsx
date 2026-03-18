@@ -19,6 +19,7 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
   const [totalRows, setTotalRows] = useState(0);
   const [parsedRows, setParsedRows] = useState<Record<string, any>[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadMode, setUploadMode] = useState<'upsert' | 'insert_only'>('upsert');
   const [result, setResult] = useState<{ success: number; errors: number; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSQL, setShowSQL] = useState(false);
@@ -104,23 +105,37 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
     try {
       for (let i = 0; i < parsedRows.length; i += BATCH) {
         const batch = parsedRows.slice(i, i + BATCH);
-        const { error: upsertError, count } = await supabase
-          .from(tableName)
-          .upsert(batch, { onConflict: 'employee_id' });
 
-        if (upsertError) {
-          if (upsertError.code === '42P01') {
-            // Table does not exist
+        let opError: any = null;
+
+        if (uploadMode === 'upsert') {
+          // Update existing + insert new (preserves columns not in this CSV)
+          const { error } = await supabase
+            .from(tableName)
+            .upsert(batch, { onConflict: 'employee_id' });
+          opError = error;
+        } else {
+          // Insert new employees only — skip conflicts
+          const { error } = await supabase
+            .from(tableName)
+            .insert(batch);
+          // Ignore duplicate key errors (23505) when insert-only mode
+          opError = error && error.code !== '23505' ? error : null;
+        }
+
+        if (opError) {
+          if (opError.code === '42P01') {
             throw new Error(`Table "${tableName}" does not exist in Supabase. See the SQL below to create it.`);
           }
           errorCount += batch.length;
-          console.error('Upsert error:', upsertError);
+          console.error('Upload error:', opError);
         } else {
           successCount += batch.length;
         }
       }
 
-      setResult({ success: successCount, errors: errorCount, message: `Upload complete for ${year}.` });
+      const modeLabel = uploadMode === 'upsert' ? 'Updated & added' : 'New records added';
+      setResult({ success: successCount, errors: errorCount, message: `${modeLabel} for ${year}.` });
       onYearAdded?.(year.trim());
     } catch (err: any) {
       setError(err.message || 'Upload failed.');
@@ -193,6 +208,42 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
           />
           <p className="text-xs text-slate-400">The data will be uploaded to the <code className="bg-slate-100 px-1 rounded text-blue-600">health_{year || 'YYYY'}</code> table.</p>
         </div>
+      </div>
+
+      {/* Upload Mode */}
+      <div className="card-minimal p-6">
+        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Upload Mode</label>
+        <div className="flex flex-col sm:flex-row gap-3 mt-3">
+          <button
+            onClick={() => setUploadMode('upsert')}
+            className={cn(
+              "flex-1 text-left p-4 rounded-2xl border-2 transition-all",
+              uploadMode === 'upsert' ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-slate-300"
+            )}
+          >
+            <p className={cn("text-xs font-bold", uploadMode === 'upsert' ? "text-white" : "text-slate-900")}>Update & Add</p>
+            <p className={cn("text-[10px] mt-1 leading-relaxed", uploadMode === 'upsert' ? "text-slate-300" : "text-slate-400")}>
+              Insert new employees + update existing ones. Use this when you have updated health check data for the same year.
+              Only the columns in this CSV are updated — other fields are not touched.
+            </p>
+          </button>
+          <button
+            onClick={() => setUploadMode('insert_only')}
+            className={cn(
+              "flex-1 text-left p-4 rounded-2xl border-2 transition-all",
+              uploadMode === 'insert_only' ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-slate-300"
+            )}
+          >
+            <p className={cn("text-xs font-bold", uploadMode === 'insert_only' ? "text-white" : "text-slate-900")}>Add New Only</p>
+            <p className={cn("text-[10px] mt-1 leading-relaxed", uploadMode === 'insert_only' ? "text-slate-300" : "text-slate-400")}>
+              Only insert employees who don't exist yet. Existing records are completely skipped.
+              Use this to safely add employees without risk of overwriting anyone.
+            </p>
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 mt-3 pt-3 border-t border-slate-100">
+          Uploading questionnaire or partial data (e.g. mental health CSV)? Use <strong>Update &amp; Add</strong> — it only updates the columns present in your file.
+        </p>
       </div>
 
       {/* File Drop Zone */}
@@ -348,7 +399,7 @@ export default function UploadData({ onYearAdded }: { onYearAdded?: (year: strin
             ) : (
               <>
                 <Database size={16} />
-                Upload {totalRows} Records to health_{year}
+                {uploadMode === 'upsert' ? 'Update & Add' : 'Add New Only'} — {totalRows} Records to health_{year}
               </>
             )}
           </button>
