@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Wine, Cigarette, Stethoscope, Menu, Activity, Users, Upload, Plus, LogOut } from 'lucide-react';
+import { LayoutDashboard, Wine, Cigarette, Stethoscope, Menu, Activity, Users, Upload, Plus, LogOut, FlaskConical } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from './lib/utils';
 import { isSupabaseConfigured } from './lib/supabase';
@@ -11,6 +11,7 @@ import Smoking from './pages/Smoking';
 import OccupationalMedicine from './pages/OccupationalMedicine';
 import EmployeeOverview from './pages/EmployeeOverview';
 import UploadData from './pages/Upload';
+import SpecialScreening from './pages/SpecialScreening';
 
 const INITIAL_YEARS = ['2024', '2025'];
 const YEARS_KEY = 'healthdash_years';
@@ -78,6 +79,7 @@ const Sidebar = ({ isOpen, onSignOut }: { isOpen: boolean; onSignOut: () => void
 
           <p className="text-[9px] uppercase tracking-widest text-slate-300 font-bold px-4 pt-4 pb-1">Occupational Health</p>
           <SidebarItem to="/occupational-medicine" icon={Stethoscope} label="Occ Medicine" active={location.pathname === "/occupational-medicine"} />
+          <SidebarItem to="/special-screening" icon={FlaskConical} label="Amphetamine & ลมชัก" active={location.pathname === "/special-screening"} />
 
           <p className="text-[9px] uppercase tracking-widest text-slate-300 font-bold px-4 pt-4 pb-1">Data</p>
           <SidebarItem to="/upload" icon={Upload} label="Upload CSV" active={location.pathname === "/upload"} />
@@ -248,6 +250,7 @@ export default function App() {
               <Route path="/drinking" element={<Drinking />} />
               <Route path="/smoking" element={<Smoking />} />
               <Route path="/occupational-medicine" element={<OccupationalMedicine />} />
+              <Route path="/special-screening" element={<SpecialScreening />} />
               <Route path="/upload" element={<UploadData onYearAdded={handleYearAdded} />} />
             </Routes>
           </main>
